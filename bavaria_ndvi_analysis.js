@@ -347,3 +347,154 @@ var comparisonChart = ui.Chart.feature.groups({
 
 print(comparisonChart);
 
+// ======================================================
+// TASK 1 - HANSEN LOSS PIXEL STRATIFICATION
+// ======================================================
+
+
+var treecover = hansen.select('treecover2000');
+var lossyear = hansen.select('lossyear');
+
+var denseCandidates =
+    treecover.gte(80)
+    .and(treecover.lte(100))
+    .and(lossyear.gte(20));
+
+var denseCandidates2 =
+    treecover.gte(80)
+    .and(treecover.lte(100))
+    .and(lossyear.gte(20));
+
+var mediumCandidates =
+    treecover.gte(60)
+    .and(treecover.lte(79))
+    .and(lossyear.gte(20));
+
+var sparseCandidates =
+    treecover.gte(40)
+    .and(treecover.lte(59))
+    .and(lossyear.gte(20));
+
+var verySparseCandidates =
+    treecover.gte(20)
+    .and(treecover.lte(39))
+    .and(lossyear.gte(20));
+    
+Map.addLayer(
+  denseCandidates.selfMask().clip(bavaria),
+  {palette: ['darkgreen']},
+  'Dense Candidates (80-100)'
+);
+
+Map.addLayer(
+  mediumCandidates.selfMask().clip(bavaria),
+  {palette: ['yellow']},
+  'Medium Candidates (60-79)'
+);
+
+Map.addLayer(
+  sparseCandidates.selfMask().clip(bavaria),
+  {palette: ['orange']},
+  'Sparse Candidates (40-59)'
+);
+
+Map.addLayer(
+  verySparseCandidates.selfMask().clip(bavaria),
+  {palette: ['red']},
+  'Very Sparse Candidates (20-39)'
+);
+
+
+// ======================================================
+// TASK 1 - Define Sample Pixels
+// ======================================================
+
+// Dense Forest 1 (80-100)
+var densePoint1 = ee.Geometry.Point([11.4376, 48.0569]);
+
+// Dense Forest 2 (80-100)
+var densePoint2 = ee.Geometry.Point([11.62360, 47.98457]);
+
+// Medium Density (60-79)
+var mediumPoint = ee.Geometry.Point([11.29928, 48.04259]);
+
+// Sparse (40-59)
+var sparsePoint = ee.Geometry.Point([11.448847, 48.015903]);
+
+// Very Sparse (20-39)
+var verySparsePoint = ee.Geometry.Point([11.604945, 47.873129]);
+
+// ======================================================
+// Display Task 1 Sample Points
+// ======================================================
+
+Map.addLayer(densePoint1, {color:'brown'}, 'Dense 1');
+Map.addLayer(densePoint2, {color:'orange'}, 'Dense 2');
+Map.addLayer(mediumPoint, {color:'yellow'}, 'Medium');
+Map.addLayer(sparsePoint, {color:'cyan'}, 'Sparse');
+Map.addLayer(verySparsePoint, {color:'white'}, 'Very Sparse');
+
+var denseNDVI1 = buildMonthlyNDVI(
+    densePoint1,
+    'Dense 1'
+);
+
+var denseNDVI2 = buildMonthlyNDVI(
+    densePoint2,
+    'Dense 2'
+);
+
+var mediumNDVI = buildMonthlyNDVI(
+    mediumPoint,
+    'Medium'
+);
+
+var sparseNDVI = buildMonthlyNDVI(
+    sparsePoint,
+    'Sparse'
+);
+
+var verySparseNDVI = buildMonthlyNDVI(
+    verySparsePoint,
+    'Very Sparse'
+);
+
+// ======================================================
+// TASK 1: Reusable NDVI Chart Function
+// ======================================================
+function printNDVIChart(featureCollection, title) {
+
+  var chart = ui.Chart.feature.byFeature(
+    featureCollection,
+    'date',
+    'NDVI'
+  )
+  .setChartType('LineChart')
+  .setOptions({
+    title: title,
+    hAxis: {
+      title: 'Date',
+      slantedText: true,
+      slantedTextAngle: 45
+    },
+    vAxis: {
+      title: 'NDVI',
+      viewWindow: {min: 0, max: 1}
+    },
+    lineWidth: 3,
+    pointSize: 4,
+    colors: ['forestgreen']
+  });
+
+  print(chart);
+}
+
+printNDVIChart(denseNDVI1, 'Dense Forest (80–100%)');
+
+printNDVIChart(denseNDVI2, 'Dense Forest 2 (80–100%)');
+
+printNDVIChart(mediumNDVI, 'Medium Forest (60–79%)');
+
+printNDVIChart(sparseNDVI, 'Sparse Forest (40–59%)');
+
+printNDVIChart(verySparseNDVI, 'Very Sparse Forest (20–39%)');
