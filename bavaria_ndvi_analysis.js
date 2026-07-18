@@ -401,7 +401,7 @@ function printComparisonChart(featureCollection, title) {
 
 
 // ======================================================
-// Generate All Final Dual Axis Comparison Charts
+// Generate All Final Dual Axis Comparison Plots
 // ======================================================
 printComparisonChart(healthyCombined, 'Healthy Forest : NDVI vs VH');
 printComparisonChart(dense1Combined, 'Dense Forest 1 : NDVI vs VH');
@@ -409,3 +409,4 @@ printComparisonChart(dense2Combined, 'Dense Forest 2 : NDVI vs VH');
 printComparisonChart(mediumCombined, 'Medium Forest : NDVI vs VH');
 printComparisonChart(sparseCombined, 'Sparse Forest : NDVI vs VH');
 printComparisonChart(verySparseCombined, 'Very Sparse Forest : NDVI vs VH');
+
