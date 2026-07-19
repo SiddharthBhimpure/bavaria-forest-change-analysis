@@ -154,30 +154,55 @@ Map.addLayer(lossPoint, {color: 'red'}, 'Confirmed Loss Point');
 // ======================================================
 // STEP 20: Reusable Function to Build Standardized Monthly NDVI
 // ======================================================
-function buildMonthlyNDVI(point, label) { 
-  return ee.FeatureCollection( 
-    years.map(function(year){ 
-      return months.map(function(month){ 
-        var start = ee.Date.fromYMD(year, month, 1); 
-        var end = start.advance(1, 'month'); 
-        var monthlyComposite = s2Indices.filterDate(start, end).median(); 
-        var ndvi = monthlyComposite.select('NDVI').reduceRegion({ 
-          reducer: ee.Reducer.mean(), 
-          geometry: point, 
-          scale: 10, 
-          maxPixels: 1e9 
-        }).get('NDVI'); 
+function buildMonthlyNDVI(point, label) {
+
+  return ee.FeatureCollection(
+
+    years.map(function(year) {
+
+      return months.map(function(month) {
+
+        var start = ee.Date.fromYMD(year, month, 1);
+        var end = start.advance(1, 'month');
+
+        var monthlyComposite =
+            s2Indices
+              .filterDate(start, end)
+              .median();
+
+        var ndvi =
+            monthlyComposite
+              .select('NDVI')
+              .reduceRegion({
+                reducer: ee.Reducer.mean(),
+                geometry: point,
+                scale: 10,
+                maxPixels: 1e9
+              })
+              .get('NDVI');
+
         return ee.Feature(null,{
+
           date: start.format('yyyy-MM'),
+
+          year: year,
+
+          month: month,
+
           NDVI: ndvi,
+
           Location: label
+
         });
-      }); 
-    }).flatten() 
-  ).filter(ee.Filter.notNull(['NDVI'])); 
-} 
 
+      });
 
+    }).flatten()
+
+  )
+  .filter(ee.Filter.notNull(['NDVI']));
+
+}
 // ======================================================
 // STEP 21 & 22: Generate & Merge Time Series 
 // ======================================================
@@ -401,7 +426,7 @@ function printComparisonChart(featureCollection, title) {
 
 
 // ======================================================
-// Generate All Final Dual Axis Comparison Plots
+// Generate All Final Dual Axis Comparison Charts
 // ======================================================
 printComparisonChart(healthyCombined, 'Healthy Forest : NDVI vs VH');
 printComparisonChart(dense1Combined, 'Dense Forest 1 : NDVI vs VH');
@@ -409,4 +434,165 @@ printComparisonChart(dense2Combined, 'Dense Forest 2 : NDVI vs VH');
 printComparisonChart(mediumCombined, 'Medium Forest : NDVI vs VH');
 printComparisonChart(sparseCombined, 'Sparse Forest : NDVI vs VH');
 printComparisonChart(verySparseCombined, 'Very Sparse Forest : NDVI vs VH');
+
+
+
+
+
+
+
+
+
+
+// ======================================================
+// TASK 3: COMPLETE MONTHLY CLIMATOLOGY & RESIDUAL NDVI
+// ======================================================
+
+// ------------------------------------------------------
+// STEP 1A: Compute Monthly Climatology Baseline Collection
+// ------------------------------------------------------
+var monthlyClimatology = ee.FeatureCollection(
+  months.map(function(month){
+    month = ee.Number(month);
+
+    var monthData = monthlyNDVI.filter(
+      ee.Filter.eq('month', month)
+    );
+
+    var meanNDVI = ee.Number(monthData.aggregate_mean('NDVI'));
+
+    return ee.Feature(null, {
+      'Month': month,
+      'Mean_NDVI': meanNDVI
+    });
+  })
+);
+
+print('Monthly NDVI Climatology Baseline Collection:', monthlyClimatology);
+
+// Render Climatology Baseline Chart
+var climatologyChart = ui.Chart.feature.byFeature(
+    monthlyClimatology,
+    'Month',
+    'Mean_NDVI'
+)
+.setChartType('LineChart')
+.setOptions({
+    title: 'Healthy Forest Monthly NDVI Climatology Baseline',
+    hAxis: {
+      title: 'Month (1-12)',
+      ticks: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+    },
+    vAxis: {
+      title: 'Average Baseline NDVI'
+    },
+    lineWidth: 3,
+    pointSize: 5,
+    colors: ['forestgreen']
+});
+
+print(climatologyChart);
+
+// ------------------------------------------------------
+// STEP 1B: Convert Monthly Climatology Collection to Dictionary (Lookup Table)
+// ------------------------------------------------------
+var climatologyDict = ee.Dictionary(
+  monthlyClimatology.iterate(function(feature, dict) {
+    feature = ee.Feature(feature);
+    dict = ee.Dictionary(dict);
+
+    return dict.set(
+      ee.Number(feature.get('Month')).format(),
+      feature.get('Mean_NDVI')
+    );
+  }, ee.Dictionary({}))
+);
+
+print(climatologyDict);
+
+
+// ------------------------------------------------------
+// STEP 2: Reusable Residual Calculation Function 
+// ------------------------------------------------------
+
+function computeResidualSeries(featureCollection, locationName) {
+
+  return featureCollection.map(function(feature) { 
+    // Read the raw fields safely
+    var rawMonth = feature.get('month');
+    var actualNDVI = feature.get('NDVI'); 
+    
+    // Set up standard default fallbacks for missing months
+    var monthString = ee.String(ee.Algorithms.If(rawMonth, ee.Number(rawMonth).format('%.1f'), '1.0'));
+    
+    // Server-side lookup using our dictionary table
+    var expectedNDVI = ee.Number(climatologyDict.get(monthString));
+
+    // Inline conditional evaluation to completely eliminate scoping errors
+    var residual = ee.Number(
+      ee.Algorithms.If(
+        actualNDVI, 
+        ee.Number(actualNDVI).subtract(expectedNDVI), 
+        null
+      )
+    );
+
+    // Strict schema binding to make sure the properties exist explicitly for the chart engine
+    return feature.set({
+      'Location': locationName,
+      'Expected_NDVI': ee.Algorithms.If(rawMonth, expectedNDVI, null),
+      'Residual_NDVI': ee.Algorithms.If(rawMonth, residual, null)
+    });
+  });
+}
+// ------------------------------------------------------
+// STEP 3: Compute the Residual Collections for Each Pixel
+// ------------------------------------------------------
+// This takes your raw pixel datasets and pushes them through the formula
+var denseResidual1 = computeResidualSeries(denseNDVI1, 'Dense Forest 1');
+var denseResidual2 = computeResidualSeries(denseNDVI2, 'Dense Forest 2');
+var mediumResidual  = computeResidualSeries(mediumNDVI,  'Medium Forest');
+var sparseResidual  = computeResidualSeries(sparseNDVI,  'Sparse Forest');
+var verySparseResidual = computeResidualSeries(verySparseNDVI, 'Very Sparse Forest');
+
+
+// ------------------------------------------------------
+// STEP 4: Reusable Residual NDVI Chart Function
+// ------------------------------------------------------
+function plotResidualChart(featureCollection, title) {
+
+  var chart = ui.Chart.feature.byFeature(
+      featureCollection,
+      'date',
+      ['Residual_NDVI']
+  )
+  .setChartType('LineChart')
+  .setOptions({
+      title: title,
+      hAxis: {
+        title: 'Date'
+      },
+      vAxis: {
+        title: 'Residual NDVI',
+        viewWindow: {min: -0.6, max: 0.4} 
+      },
+      lineWidth: 2,
+      pointSize: 4,
+      interpolateNulls: true, // Seamlessly connects data gaps 
+      colors: ['crimson']
+  });
+
+  print(chart);
+}
+
+
+// ------------------------------------------------------
+// STEP 5: Generate and Print the 5 Individual Residual Charts
+// ------------------------------------------------------
+plotResidualChart(denseResidual1, 'Dense Forest 1 - Residual NDVI Timeline');
+plotResidualChart(denseResidual2, 'Dense Forest 2 - Residual NDVI Timeline');
+plotResidualChart(mediumResidual,  'Medium Forest - Residual NDVI Timeline');
+plotResidualChart(sparseResidual,  'Sparse Forest - Residual NDVI Timeline');
+plotResidualChart(verySparseResidual, 'Very Sparse Forest - Residual NDVI Timeline');
+
 
