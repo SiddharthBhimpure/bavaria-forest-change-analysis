@@ -596,3 +596,68 @@ plotResidualChart(sparseResidual,  'Sparse Forest - Residual NDVI Timeline');
 plotResidualChart(verySparseResidual, 'Very Sparse Forest - Residual NDVI Timeline');
 
 
+
+
+
+// ======================================================
+// TASK 4: SENTINEL-2 DATA AVAILABILITY AUDIT 
+// ======================================================
+
+function countMonthlyObservations(point, label) {
+  
+  var monthlyCounts = ee.FeatureCollection(
+    months.map(function(month){
+      month = ee.Number(month);
+
+      
+      var monthImages = s2Masked
+        .filterBounds(point)
+        .filter(ee.Filter.calendarRange(month, month, 'month'));
+
+      
+      var validObservationsCount = monthImages.map(function(img) {
+        var stats = img.select('B4').reduceRegion({
+          reducer: ee.Reducer.first(),
+          geometry: point,
+          scale: 10
+        });
+        
+       
+        var isValid = ee.Algorithms.If(stats.get('B4'), 1, 0);
+        return ee.Feature(null, {'is_valid': isValid});
+      }).aggregate_sum('is_valid'); 
+
+      return ee.Feature(null, {
+        Location: label,
+        Month: month,
+        Valid_Observations: ee.Number(validObservationsCount)
+      });
+    })
+  );
+
+  return monthlyCounts;
+}
+// ------------------------------------------------------
+// STEP 2 & 3: Run Audit and Merge 
+// ------------------------------------------------------
+var healthyAudit      = countMonthlyObservations(forestPoint, 'Healthy Forest');
+var denseAudit1       = countMonthlyObservations(densePoint1, 'Dense Forest 1');
+var denseAudit2       = countMonthlyObservations(densePoint2, 'Dense Forest 2');
+var mediumAudit      = countMonthlyObservations(mediumPoint, 'Medium Forest');
+var sparseAudit       = countMonthlyObservations(sparsePoint, 'Sparse Forest');
+var verySparseAudit   = countMonthlyObservations(verySparsePoint, 'Very Sparse Forest');
+
+var observationAudit = healthyAudit
+    .merge(denseAudit1)
+    .merge(denseAudit2)
+    .merge(mediumAudit)
+    .merge(sparseAudit)
+    .merge(verySparseAudit);
+
+print('Corrected Monthly Observation Audit Table', observationAudit);
+
+Export.table.toDrive({
+  collection: observationAudit,
+  description: 'Task4_Monthly_Observation_Audit',
+  fileFormat: 'CSV'
+});
