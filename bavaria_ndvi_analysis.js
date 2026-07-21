@@ -554,7 +554,7 @@ var denseResidual2 = computeResidualSeries(denseNDVI2, 'Dense Forest 2');
 var mediumResidual  = computeResidualSeries(mediumNDVI,  'Medium Forest');
 var sparseResidual  = computeResidualSeries(sparseNDVI,  'Sparse Forest');
 var verySparseResidual = computeResidualSeries(verySparseNDVI, 'Very Sparse Forest');
-
+var healthyForestResidual = computeResidualSeries(monthlyNDVI, 'Healthy Forest');
 
 // ------------------------------------------------------
 // STEP 4: Reusable Residual NDVI Chart Function
@@ -594,7 +594,7 @@ plotResidualChart(denseResidual2, 'Dense Forest 2 - Residual NDVI Timeline');
 plotResidualChart(mediumResidual,  'Medium Forest - Residual NDVI Timeline');
 plotResidualChart(sparseResidual,  'Sparse Forest - Residual NDVI Timeline');
 plotResidualChart(verySparseResidual, 'Very Sparse Forest - Residual NDVI Timeline');
-
+plotResidualChart(healthyForestResidual, 'Healthy Forest - Residual NDVI Timeline');
 
 
 
@@ -660,4 +660,131 @@ Export.table.toDrive({
   collection: observationAudit,
   description: 'Task4_Monthly_Observation_Audit',
   fileFormat: 'CSV'
+});
+
+
+
+
+
+
+//=====================================================
+// TASK 5
+// DATE-BASED JOIN OF NDVI RESIDUAL + SENTINEL-1 VH
+//=====================================================
+
+function joinResidualAndVH(residualCollection, vhCollection, locationName){
+
+  // Join using the "date" property
+  var joinFilter = ee.Filter.equals({
+    leftField: 'date',
+    rightField: 'date'
+  });
+
+  var innerJoin = ee.Join.inner();
+
+  var joined = innerJoin.apply(
+      residualCollection,
+      vhCollection,
+      joinFilter
+  );
+
+  var output = ee.FeatureCollection(
+    joined.map(function(feature){
+
+      feature = ee.Feature(feature);
+
+      var left = ee.Feature(feature.get('primary'));
+      var right = ee.Feature(feature.get('secondary'));
+
+      return ee.Feature(null,{
+
+        Location : locationName,
+
+        date : left.get('date'),
+
+        year : left.get('year'),
+
+        month : left.get('month'),
+
+        Residual_NDVI : left.get('Residual_NDVI'),
+
+        Expected_NDVI : left.get('Expected_NDVI'),
+
+        Actual_NDVI : left.get('NDVI'),
+
+        VH : right.get('VH'),
+
+        VV : right.get('VV')
+
+      });
+
+    })
+  );
+
+  return output.sort('date');
+
+}
+
+
+var healthyJoined =
+joinResidualAndVH(
+healthyForestResidual,
+healthyS1,
+'Healthy Forest'
+);
+
+var denseJoined1 =
+joinResidualAndVH(
+denseResidual1,
+denseS1_1,
+'Dense Forest 1'
+);
+
+var denseJoined2 =
+joinResidualAndVH(
+denseResidual2,
+denseS1_2,
+'Dense Forest 2'
+);
+
+var mediumJoined =
+joinResidualAndVH(
+mediumResidual,
+mediumS1,
+'Medium Forest'
+);
+
+var sparseJoined =
+joinResidualAndVH(
+sparseResidual,
+sparseS1,
+'Sparse Forest'
+);
+
+var verySparseJoined =
+joinResidualAndVH(
+verySparseResidual,
+verySparseS1,
+'Very Sparse Forest'
+);
+
+var task5Joined =
+healthyJoined
+.merge(denseJoined1)
+.merge(denseJoined2)
+.merge(mediumJoined)
+.merge(sparseJoined)
+.merge(verySparseJoined);
+
+print(task5Joined.limit(10));
+
+
+Export.table.toDrive({
+
+collection: task5Joined,
+
+description:'Task5_DateMatched_NDVI_VH',
+
+fileFormat:'CSV'
+
 });
